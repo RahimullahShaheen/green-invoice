@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { ServicesTable } from '@/components/ServicesTable';
 import { InvoiceTotals } from '@/components/InvoiceTotals';
-import { useBusinessInfo, useInvoices } from '@/hooks/useInvoices';
+import { useBusinessInfo } from '@/hooks/useInvoices';
+import { upsertInvoiceToSupabase } from '@/lib/supabaseInvoices';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,17 +32,19 @@ import {
   getInvoice,
 } from '@/lib/invoiceUtils';
 import { useToast } from '@/hooks/use-toast';
+import { getInvoiceFromSupabase } from '@/lib/supabaseInvoices';
 
 export default function InvoiceBuilder() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
-  const { businessInfo, saveBusinessInfo } = useBusinessInfo();
-  const { saveInvoice } = useInvoices();
+  const { businessInfo } = useBusinessInfo();
 
   const isEditing = !!id && id !== 'new';
 
   // Form state
+  const [loadingInvoice, setLoadingInvoice] = useState(false);
+  const [existingCreatedAt, setExistingCreatedAt] = useState<string | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTerms, setPaymentTerms] = useState('net-14');
@@ -61,23 +64,47 @@ export default function InvoiceBuilder() {
   const [gstEnabled, setGstEnabled] = useState(true);
   const [notes, setNotes] = useState('');
 
-  // Load existing invoice if editing
+  // Load existing invoice if editing (fetch from Supabase)
   useEffect(() => {
-    if (isEditing) {
-      const existing = getInvoice(id);
-      if (existing) {
-        setInvoiceNumber(existing.invoiceNumber);
-        setIssueDate(existing.issueDate);
-        setPaymentTerms(existing.paymentTerms);
-        setDueDate(existing.dueDate);
-        setStatus(existing.status);
-        setClient(existing.clientInfo);
-        setItems(existing.items);
-        setDiscount(existing.discount);
-        setDiscountType(existing.discountType);
-        setGstEnabled(existing.gstEnabled);
-        setNotes(existing.notes || '');
+    async function fetchInvoice() {
+      if (!isEditing || !id) return;
+      setLoadingInvoice(true);
+      const inv = await getInvoiceFromSupabase(id);
+      if (inv) {
+        // Map possible snake_case keys to camelCase
+        const mapped = {
+          invoiceNumber: (inv as any).invoicenumber ?? (inv as any).invoiceNumber,
+          issueDate: (inv as any).issuedate ?? (inv as any).issueDate,
+          paymentTerms: (inv as any).paymentterms ?? (inv as any).paymentTerms,
+          dueDate: (inv as any).duedate ?? (inv as any).dueDate,
+          status: (inv as any).status ?? inv.status,
+          clientInfo: (inv as any).clientinfo ?? (inv as any).clientInfo,
+          items: (inv as any).items ?? inv.items,
+          discount: (inv as any).discount ?? inv.discount,
+          discountType: (inv as any).discounttype ?? inv.discountType,
+          gstEnabled: (inv as any).gstenabled ?? inv.gstEnabled,
+          notes: (inv as any).notes ?? inv.notes,
+          createdAt: (inv as any).createdat ?? (inv as any).createdAt ?? null,
+        } as any;
+
+        setInvoiceNumber(mapped.invoiceNumber ?? generateInvoiceNumber());
+        setIssueDate(mapped.issueDate ?? new Date().toISOString().split('T')[0]);
+        setPaymentTerms(mapped.paymentTerms ?? 'net-14');
+        setDueDate(mapped.dueDate ?? getDueDateFromTerms(mapped.issueDate ?? issueDate, mapped.paymentTerms ?? paymentTerms));
+        setStatus(mapped.status ?? 'draft');
+        setClient(mapped.clientInfo ?? { name: '', email: '', phone: '', address: '' });
+        setItems(mapped.items ?? []);
+        setDiscount(mapped.discount ?? 0);
+        setDiscountType(mapped.discountType ?? 'percentage');
+        setGstEnabled(mapped.gstEnabled ?? true);
+        setNotes(mapped.notes ?? '');
+        setExistingCreatedAt(mapped.createdAt);
       }
+      setLoadingInvoice(false);
+    }
+
+    if (isEditing) {
+      fetchInvoice();
     } else {
       setInvoiceNumber(generateInvoiceNumber());
     }
@@ -92,7 +119,7 @@ export default function InvoiceBuilder() {
     return calculateInvoiceTotals(items, discount, discountType, gstEnabled, 10);
   }, [items, discount, discountType, gstEnabled]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     // Validation
     if (!client.name.trim()) {
       toast({
@@ -130,16 +157,24 @@ export default function InvoiceBuilder() {
       gstAmount: totals.gstAmount,
       total: totals.total,
       notes,
-      createdAt: isEditing ? id : new Date().toISOString(),
+      createdAt: isEditing ? (existingCreatedAt || new Date().toISOString()) : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    saveInvoice(invoice);
-    toast({
-      title: isEditing ? 'Invoice updated' : 'Invoice created',
-      description: `Invoice ${invoiceNumber} has been saved.`,
-    });
-    navigate(`/invoice/${invoice.id}`);
+    const success = await upsertInvoiceToSupabase(invoice);
+    if (success) {
+      toast({
+        title: isEditing ? 'Invoice updated' : 'Invoice created',
+        description: `Invoice ${invoiceNumber} has been saved.`,
+      });
+      navigate(`/invoice/${invoice.id}`);
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Failed to save invoice to the database.',
+        variant: 'destructive',
+      });
+    }
   }, [
     client,
     items,
@@ -156,9 +191,9 @@ export default function InvoiceBuilder() {
     gstEnabled,
     totals,
     notes,
-    saveInvoice,
     toast,
     navigate,
+    existingCreatedAt,
   ]);
 
   return (

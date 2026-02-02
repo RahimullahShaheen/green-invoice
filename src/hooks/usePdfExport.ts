@@ -12,7 +12,7 @@ export function usePdfExport() {
 
     try {
       const canvas = await html2canvas(targetElement, {
-        scale: 2,
+        scale: 4,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -28,7 +28,7 @@ export function usePdfExport() {
         format: 'a4',
       });
 
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL("image/jpeg", 1.0);
       
       // Add padding
       const margin = 10;
@@ -37,7 +37,7 @@ export function usePdfExport() {
 
       pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, contentHeight);
 
-      pdf.save(`${invoice.invoiceNumber}.pdf`);
+      pdf.save(`${invoice.clientInfo.name}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       throw error;

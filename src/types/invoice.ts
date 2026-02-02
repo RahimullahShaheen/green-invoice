@@ -1,11 +1,14 @@
 // Invoice types for the application
 export interface BusinessInfo {
+  id?: number;
   businessName: string;
   email: string;
   phone: string;
   address: string;
   abn?: string;
   logoUrl?: string;
+  bankAccountNumber?: string;
+  bankBSB?: string;
 }
 
 export interface ClientInfo {
@@ -19,7 +22,8 @@ export interface ClientInfo {
 export interface ServiceItem {
   id: string;
   service: string;
-  description: string;
+  description?: string;
+  dates: string[]; // ✅ array of ISO strings
   quantity: number;
   rate: number;
   total: number;
@@ -51,7 +55,7 @@ export interface Invoice {
 
 // Default landscaping services
 export const DEFAULT_SERVICES = [
-  { service: 'Lawn Mowing', description: 'Regular lawn mowing and edging', rate: 65 },
+  { service: 'Lawn Maintanance', description: 'Lawn Maintainance of all areas cleaning all common areas and spraying of weeds', rate: 180 },
   { service: 'Hedge Trimming', description: 'Hedge and shrub trimming', rate: 85 },
   { service: 'Garden Clean Up', description: 'General garden cleanup and waste removal', rate: 120 },
   { service: 'Mulching', description: 'Mulch supply and spreading', rate: 95 },
@@ -72,9 +76,12 @@ export const PAYMENT_TERMS = [
 ];
 
 export const DEFAULT_BUSINESS_INFO: BusinessInfo = {
+  id: 1,
   businessName: 'Mazzari Landscape Management',
   email: 'info@mazzarilandscape.com.au',
   phone: '0400 000 000',
   address: 'Sydney, NSW, Australia',
   abn: '',
+  bankAccountNumber: '',
+  bankBSB: '',
 };

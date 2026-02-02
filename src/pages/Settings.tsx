@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Header } from '@/components/Header';
 import { useBusinessInfo } from '@/hooks/useInvoices';
+import { saveBusinessInfoToSupabase } from '@/lib/supabaseBusiness';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,12 +13,20 @@ export default function Settings() {
   const { businessInfo, saveBusinessInfo } = useBusinessInfo();
   const [formData, setFormData] = useState(businessInfo);
 
-  const handleSave = () => {
-    saveBusinessInfo(formData);
-    toast({
-      title: 'Settings saved',
-      description: 'Your business information has been updated.',
-    });
+  const handleSave = async () => {
+    const success = await saveBusinessInfoToSupabase(formData);
+    if (success) {
+      toast({
+        title: 'Settings saved',
+        description: 'Your business information has been updated.',
+      });
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Failed to save business information to the database.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -101,6 +110,29 @@ export default function Settings() {
                 }
                 placeholder="12 345 678 901"
               />
+            </div>
+
+            {/* Bank Details */}
+            <div className="pt-4 border-t border-border mt-4">
+              <h3 className="text-base font-semibold mb-2">Bank Details</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Account Number</Label>
+                  <Input
+                    value={formData.bankAccountNumber || ''}
+                    onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
+                    placeholder="Account Number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>BSB</Label>
+                  <Input
+                    value={formData.bankBSB || ''}
+                    onChange={(e) => setFormData({ ...formData, bankBSB: e.target.value })}
+                    placeholder="BSB"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="pt-4">

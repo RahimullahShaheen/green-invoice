@@ -4,8 +4,9 @@ import { Header } from '@/components/Header';
 import { InvoicePreview } from '@/components/InvoicePreview';
 import { StatusBadge } from '@/components/StatusBadge';
 import { usePdfExport } from '@/hooks/usePdfExport';
-import { useInvoices } from '@/hooks/useInvoices';
-import { getInvoice } from '@/lib/invoiceUtils';
+// import { useInvoices } from '@/hooks/useInvoices';
+import { getInvoiceFromSupabase } from '@/lib/supabaseInvoices';
+import { getBusinessInfoFromSupabase } from '@/lib/supabaseBusiness';
 import { Invoice } from '@/types/invoice';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,19 +43,55 @@ export default function InvoiceView() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { previewRef, exportToPdf } = usePdfExport();
-  const { updateStatus, deleteInvoice } = useInvoices();
+
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [businessInfo, setBusinessInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
+  // Helper to map Supabase invoice keys to camelCase
+  function mapInvoiceKeys(inv: any): Invoice {
+    if (!inv) return inv;
+    return {
+      ...inv,
+      id: inv.id,
+      invoiceNumber: inv.invoicenumber,
+      issueDate: inv.issuedate,
+      dueDate: inv.duedate,
+      paymentTerms: inv.paymentterms,
+      status: inv.status,
+      businessInfo: inv.businessinfo,
+      clientInfo: inv.clientinfo,
+      items: inv.items,
+      subtotal: inv.subtotal,
+      discount: inv.discount,
+      discountType: inv.discounttype,
+      gstEnabled: inv.gstenabled,
+      gstRate: inv.gstrate,
+      gstAmount: inv.gstamount,
+      total: inv.total,
+      notes: inv.notes,
+      createdAt: inv.createdat,
+      updatedAt: inv.updatedat,
+    };
+  }
+
   useEffect(() => {
-    if (id) {
-      const data = getInvoice(id);
-      setInvoice(data);
+    async function fetchData() {
+      setLoading(true);
+      if (id) {
+        // Fetch invoice from Supabase
+        const inv = await getInvoiceFromSupabase(id);
+        setInvoice(mapInvoiceKeys(inv));
+      }
+      // Fetch business info from Supabase
+      const biz = await getBusinessInfoFromSupabase();
+      setBusinessInfo(biz);
       setLoading(false);
     }
+    fetchData();
   }, [id]);
 
   const handleExport = async () => {
@@ -77,24 +114,36 @@ export default function InvoiceView() {
     }
   };
 
-  const handleStatusChange = (status: Invoice['status']) => {
+
+  const handleStatusChange = async (status: Invoice['status']) => {
     if (!invoice || !id) return;
-    updateStatus(id, status);
-    setInvoice({ ...invoice, status });
-    toast({
-      title: 'Status updated',
-      description: `Invoice marked as ${status}.`,
-    });
+    try {
+      const { upsertInvoiceToSupabase } = await import('@/lib/supabaseInvoices');
+      await upsertInvoiceToSupabase({ ...invoice, status });
+      setInvoice({ ...invoice, status });
+      toast({
+        title: 'Status updated',
+        description: `Invoice marked as ${status}.`,
+      });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update status.' });
+    }
   };
 
-  const handleDelete = () => {
+
+  const handleDelete = async () => {
     if (!id) return;
-    deleteInvoice(id);
-    toast({
-      title: 'Invoice deleted',
-      description: 'The invoice has been permanently deleted.',
-    });
-    navigate('/');
+    try {
+      const { deleteInvoiceFromSupabase } = await import('@/lib/supabaseInvoices');
+      await deleteInvoiceFromSupabase(id);
+      toast({
+        title: 'Invoice deleted',
+        description: 'The invoice has been permanently deleted.',
+      });
+      navigate('/');
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to delete invoice.' });
+    }
   };
 
   if (loading) {
@@ -111,15 +160,15 @@ export default function InvoiceView() {
     );
   }
 
-  if (!invoice) {
+  if (!invoice || !invoice.clientInfo || !invoice.businessInfo) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container py-8">
           <div className="text-center py-16">
-            <h2 className="text-2xl font-bold mb-2">Invoice not found</h2>
+            <h2 className="text-2xl font-bold mb-2">Invoice not found or incomplete</h2>
             <p className="text-muted-foreground mb-6">
-              The invoice you're looking for doesn't exist.
+              The invoice you're looking for doesn't exist or is missing required information.
             </p>
             <Link to="/">
               <Button>Back to Dashboard</Button>

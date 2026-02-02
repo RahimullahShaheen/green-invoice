@@ -1,38 +1,50 @@
-import { Leaf } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
+import { cn } from "@/lib/utils";
+import logo from "@/Assets/logo.png";
+import { AlignCenter } from "lucide-react";
 interface LogoProps {
   className?: string;
   showText?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
 }
 
 const sizeClasses = {
-  sm: 'h-8 w-8',
-  md: 'h-10 w-10',
-  lg: 'h-12 w-12',
+  sm: "h-8 w-8",
+  md: "h-10 w-10",
+  lg: "h-12 w-12",
 };
 
 const textSizeClasses = {
-  sm: 'text-lg',
-  md: 'text-xl',
-  lg: 'text-2xl',
+  sm: "text-lg",
+  md: "text-xl",
+  lg: "text-2xl",
 };
 
-export function Logo({ className, showText = true, size = 'md' }: LogoProps) {
+export function Logo({ className, showText = true, size = "md" }: LogoProps) {
   return (
-    <div className={cn('flex items-center gap-3', className)}>
+    <div className={cn("flex items-center gap-3 logo2", className)} >
+      {/* ✅ Logo Image */}
       <div
         className={cn(
-          'flex items-center justify-center rounded-xl bg-primary',
+          "flex items-center justify-center rounded-xl overflow-hidden",
           sizeClasses[size]
         )}
       >
-        <Leaf className="h-1/2 w-1/2 text-primary-foreground" />
+        <img
+          src={logo}
+          alt="Mazzari Logo"
+          className="h-full w-full object-contain"
+        />
       </div>
+
+      {/* ✅ Text */}
       {showText && (
         <div className="flex flex-col">
-          <span className={cn('font-semibold tracking-tight text-foreground', textSizeClasses[size])}>
+          <span
+            className={cn(
+              "font-semibold tracking-tight text-foreground",
+              textSizeClasses[size]
+            )}
+          >
             Mazzari
           </span>
           <span className="text-xs text-muted-foreground -mt-0.5">

@@ -4,11 +4,10 @@ import {
   getInvoices,
   saveInvoice as saveInvoiceToStorage,
   deleteInvoice as deleteInvoiceFromStorage,
-  getBusinessInfo,
-  saveBusinessInfo as saveBusinessInfoToStorage,
   searchInvoices,
   updateInvoiceStatus,
 } from '@/lib/invoiceUtils';
+import { getBusinessInfoFromSupabase, saveBusinessInfoToSupabase } from '@/lib/supabaseBusiness';
 
 export function useInvoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -72,15 +71,27 @@ export function useBusinessInfo() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = getBusinessInfo();
-    if (stored) {
-      setBusinessInfo(stored);
+    async function fetchBusinessInfo() {
+      const stored = await getBusinessInfoFromSupabase();
+      if (stored) {
+        setBusinessInfo({
+          businessName: stored.businessName,
+          email: stored.email,
+          phone: stored.phone,
+          address: stored.address,
+          abn: stored.abn || '',
+          logoUrl: stored.logoUrl || '',
+          bankAccountNumber: stored.bankAccountNumber || '',
+          bankBSB: stored.bankBSB || '',
+        });
+      }
+      setLoading(false);
     }
-    setLoading(false);
+    fetchBusinessInfo();
   }, []);
 
-  const saveBusinessInfo = (info: BusinessInfo) => {
-    saveBusinessInfoToStorage(info);
+  const saveBusinessInfo = async (info: BusinessInfo) => {
+    await saveBusinessInfoToSupabase(info);
     setBusinessInfo(info);
   };
 

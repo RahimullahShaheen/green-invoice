@@ -1,4 +1,5 @@
 import { Invoice, BusinessInfo } from '@/types/invoice';
+import { v4 as uuidv4 } from 'uuid';
 
 const INVOICES_KEY = 'mazzari_invoices';
 const BUSINESS_INFO_KEY = 'mazzari_business_info';
@@ -11,9 +12,9 @@ export function generateInvoiceNumber(): string {
   return `${prefix}-${timestamp}-${random}`;
 }
 
-// Generate unique ID
+// Generate unique ID (UUID for Supabase)
 export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
+  return uuidv4();
 }
 
 // Get all invoices
@@ -85,7 +86,19 @@ export function searchInvoices(query: string): Invoice[] {
 export function getBusinessInfo(): BusinessInfo | null {
   try {
     const data = localStorage.getItem(BUSINESS_INFO_KEY);
-    return data ? JSON.parse(data) : null;
+      if (!data) return null;
+      const parsed = JSON.parse(data);
+      // Ensure all fields exist for backward compatibility
+      return {
+        businessName: parsed.businessName || '',
+        email: parsed.email || '',
+        phone: parsed.phone || '',
+        address: parsed.address || '',
+        abn: parsed.abn || '',
+        logoUrl: parsed.logoUrl || '',
+        bankAccountNumber: parsed.bankAccountNumber || '',
+        bankBSB: parsed.bankIban || '',
+      };
   } catch {
     return null;
   }

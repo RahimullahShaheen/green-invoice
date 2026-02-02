@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useInvoices } from '@/hooks/useInvoices';
+// import { useInvoices } from '@/hooks/useInvoices';
 import { usePdfExport } from '@/hooks/usePdfExport';
 import { Header } from '@/components/Header';
 import { InvoiceCard } from '@/components/InvoiceCard';
 import { InvoicePreview } from '@/components/InvoicePreview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getInvoicesFromSupabase } from '@/lib/supabaseInvoices';
 import {
   Select,
   SelectContent,
@@ -30,7 +31,9 @@ import { Invoice, InvoiceStatus } from '@/types/invoice';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Dashboard() {
-  const { invoices, loading, deleteInvoice, updateStatus, search } = useInvoices();
+  // State for invoices and loading
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const { previewRef, exportToPdf } = usePdfExport();
   const { toast } = useToast();
 
@@ -39,40 +42,111 @@ export default function Dashboard() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pdfInvoice, setPdfInvoice] = useState<Invoice | null>(null);
 
+  // Helper to map Supabase invoice keys to camelCase
+  function mapInvoiceKeys(inv: any): Invoice {
+    return {
+      ...inv,
+      id: inv.id,
+      invoiceNumber: inv.invoicenumber,
+      issueDate: inv.issuedate,
+      dueDate: inv.duedate,
+      paymentTerms: inv.paymentterms,
+      status: inv.status,
+      businessInfo: inv.businessinfo,
+      clientInfo: inv.clientinfo,
+      items: inv.items,
+      subtotal: inv.subtotal,
+      discount: inv.discount,
+      discountType: inv.discounttype,
+      gstEnabled: inv.gstenabled,
+      gstRate: inv.gstrate,
+      gstAmount: inv.gstamount,
+      total: inv.total,
+      notes: inv.notes,
+      createdAt: inv.createdat,
+      updatedAt: inv.updatedat,
+    };
+  }
+
+  // Fetch invoices from Supabase
+  const fetchInvoices = async () => {
+    setLoading(true);
+    try {
+      const data = await getInvoicesFromSupabase();
+      // Map all invoices to camelCase keys
+      setInvoices(data.map(mapInvoiceKeys));
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to fetch invoices from database.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    search(searchQuery);
-  }, [searchQuery]);
+    fetchInvoices();
+  }, []);
 
+  // Filtered invoices by search and status
   const filteredInvoices = useMemo(() => {
-    if (statusFilter === 'all') return invoices;
-    return invoices.filter(inv => inv.status === statusFilter);
-  }, [invoices, statusFilter]);
+    let filtered = invoices;
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(inv => inv.status === statusFilter);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(inv =>
+        inv.invoiceNumber?.toLowerCase().includes(q) ||
+        inv.clientInfo?.name?.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [invoices, statusFilter, searchQuery]);
 
+  // Stats calculation
   const stats = useMemo(() => {
-    const total = invoices.reduce((sum, inv) => sum + inv.total, 0);
-    const paid = invoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + inv.total, 0);
-    const pending = invoices.filter(inv => inv.status === 'sent' || inv.status === 'draft').reduce((sum, inv) => sum + inv.total, 0);
+    const total = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const paid = invoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const pending = invoices.filter(inv => inv.status === 'sent' || inv.status === 'draft').reduce((sum, inv) => sum + (inv.total || 0), 0);
     const overdue = invoices.filter(inv => inv.status === 'overdue').length;
-    
     return { total, paid, pending, overdue };
   }, [invoices]);
 
+
+  // Delete invoice from Supabase
   const handleDelete = async () => {
     if (!deleteId) return;
-    deleteInvoice(deleteId);
-    setDeleteId(null);
-    toast({
-      title: 'Invoice deleted',
-      description: 'The invoice has been permanently deleted.',
-    });
+    try {
+      // Lazy import to avoid circular dependency
+      const { deleteInvoiceFromSupabase } = await import('@/lib/supabaseInvoices');
+      await deleteInvoiceFromSupabase(deleteId);
+      setDeleteId(null);
+      toast({
+        title: 'Invoice deleted',
+        description: 'The invoice has been permanently deleted.',
+      });
+      fetchInvoices();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to delete invoice.' });
+    }
   };
 
-  const handleMarkPaid = (id: string) => {
-    updateStatus(id, 'paid');
-    toast({
-      title: 'Invoice marked as paid',
-      description: 'The invoice status has been updated.',
-    });
+  // Mark invoice as paid in Supabase
+  const handleMarkPaid = async (id: string) => {
+    try {
+      // Find invoice
+      const invoice = invoices.find(inv => inv.id === id);
+      if (!invoice) return;
+      // Lazy import to avoid circular dependency
+      const { upsertInvoiceToSupabase } = await import('@/lib/supabaseInvoices');
+      await upsertInvoiceToSupabase({ ...invoice, status: 'paid' });
+      toast({
+        title: 'Invoice marked as paid',
+        description: 'The invoice status has been updated.',
+      });
+      fetchInvoices();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update invoice status.' });
+    }
   };
 
   const handleDownload = async (invoice: Invoice) => {
