@@ -167,7 +167,7 @@ export function ServicesTable({ items, onChange }: ServicesTableProps) {
               <th className="w-8"></th>
               <th className="min-w-[180px]">Service</th>
               <th className="min-w-[180px]">Description</th>
-              <th className="min-w-[260px]">Dates</th>
+              <th className="min-w-[260px]">Visits</th>
               <th className="w-24 text-right">Qty</th>
               <th className="w-32 text-right">Rate</th>
               <th className="w-32 text-right">Total</th>

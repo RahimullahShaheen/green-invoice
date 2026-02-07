@@ -29,18 +29,26 @@ import { Plus, Search, FileText, TrendingUp, Clock, CheckCircle } from 'lucide-r
 import { formatCurrency } from '@/lib/invoiceUtils';
 import { Invoice, InvoiceStatus } from '@/types/invoice';
 import { useToast } from '@/hooks/use-toast';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { sendInvoicesByEmail } from '@/lib/email';
 
 export default function Dashboard() {
   // State for invoices and loading
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { previewRef, exportToPdf } = usePdfExport();
   const { toast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pdfInvoice, setPdfInvoice] = useState<Invoice | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailBody, setEmailBody] = useState('Please find attached the invoices.');
+  const [sending, setSending] = useState(false);
+  const { previewRef, exportToPdf, exportToPdfBlob } = usePdfExport();
 
   // Helper to map Supabase invoice keys to camelCase
   function mapInvoiceKeys(inv: any): Invoice {
@@ -290,6 +298,11 @@ export default function Dashboard() {
                 onDelete={setDeleteId}
                 onMarkPaid={handleMarkPaid}
                 onDownload={handleDownload}
+                selectable
+                selected={selectedIds.includes(invoice.id)}
+                onSelect={(id, checked) => {
+                  setSelectedIds(prev => checked ? [...prev, id] : prev.filter(i => i !== id));
+                }}
               />
             ))}
           </div>
@@ -313,6 +326,92 @@ export default function Dashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk action sidebar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed right-4 bottom-8 z-50">
+          <div className="bg-card p-4 rounded-lg shadow-lg flex items-center gap-3">
+            <div>
+              <p className="text-sm font-medium">{selectedIds.length} selected</p>
+              <p className="text-xs text-muted-foreground">Choose an action</p>
+            </div>
+            <div className="ml-2 flex items-center gap-2">
+              <Button variant="default" onClick={() => setSendDialogOpen(true)}>Send</Button>
+              <Button variant="ghost" onClick={() => { setSelectedIds([]); }}>Clear</Button>
+              <Button variant="outline" onClick={() => setSelectedIds(filteredInvoices.map(i=>i.id))}>Select all</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Dialog */}
+      <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Invoices</DialogTitle>
+            <DialogDescription>Enter email address and message. Selected invoices will be attached as PDFs.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label className="text-sm">To</label>
+            <Input value={emailTo} onChange={(e)=>setEmailTo(e.target.value)} placeholder="recipient@example.com" />
+            <label className="text-sm">Message</label>
+            <Textarea value={emailBody} onChange={(e)=>setEmailBody(e.target.value)} rows={6} />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={()=>setSendDialogOpen(false)}>Cancel</Button>
+            <Button onClick={async ()=>{
+              // generate PDFs and send
+              setSending(true);
+              const files: {name:string, blob:Blob}[] = [];
+              for (const id of selectedIds) {
+                const inv = invoices.find(i=>i.id===id);
+                if (!inv) continue;
+                // render to hidden preview and export
+                setPdfInvoice(inv);
+                // wait for render
+                await new Promise(r=>setTimeout(r,100));
+                const blob = await exportToPdfBlob(inv, previewRef.current);
+                if (blob) files.push({ name: `${inv.invoiceNumber}.pdf`, blob });
+              }
+              const ok = await sendInvoicesByEmail(emailTo, emailBody, files);
+              setSending(false);
+              if (ok) {
+                // Update invoice status to 'sent' in Supabase and local state
+                try {
+                  const { upsertInvoiceToSupabase } = await import('@/lib/supabaseInvoices');
+                  const updates = selectedIds.map(id => {
+                    const inv = invoices.find(i=>i.id===id);
+                    if (!inv) return null;
+                    if (inv.status === 'sent') return null;
+                    return upsertInvoiceToSupabase({ ...inv, status: 'sent' });
+                  }).filter(Boolean) as Promise<boolean>[];
+
+                  if (updates.length > 0) {
+                    await Promise.all(updates);
+                    setInvoices(prev => prev.map(i => selectedIds.includes(i.id) ? { ...i, status: 'sent' } : i));
+                  }
+                } catch (e) {
+                  console.error('Failed to update invoice status after send:', e);
+                  toast({ title: 'Warning', description: 'Email sent but failed to update invoice status.' });
+                }
+
+                setSendDialogOpen(false);
+                setSelectedIds([]);
+                toast({ title: 'Email sent', description: 'Invoices have been sent.' });
+              } else {
+                toast({ title: 'Error', description: 'Failed to send email.' });
+              }
+            }}>{sending ? 'Sending...' : 'Send'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hidden PDF Preview for Export */}
+      {pdfInvoice && (
+        <div className="fixed left-[-9999px] top-0">
+          <InvoicePreview ref={previewRef} invoice={pdfInvoice} />
+        </div>
+      )}
 
       {/* Hidden PDF Preview for Export */}
       {pdfInvoice && (

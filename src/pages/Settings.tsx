@@ -97,7 +97,7 @@ export default function Settings() {
                 onChange={(e) =>
                   setFormData({ ...formData, address: e.target.value })
                 }
-                placeholder="123 Main St, Sydney NSW"
+                placeholder=""
               />
             </div>
 
@@ -108,7 +108,7 @@ export default function Settings() {
                 onChange={(e) =>
                   setFormData({ ...formData, abn: e.target.value })
                 }
-                placeholder="12 345 678 901"
+                placeholder=""
               />
             </div>
 

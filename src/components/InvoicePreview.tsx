@@ -51,13 +51,14 @@ export const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Bill To
             </h3>
-            <p className="font-semibold text-lg max-w-[150px] break-words whitespace-normal">
+            <p className="font-semibold text-lg">{clientInfo.address}</p>
+            <p className=" max-w-[190px] break-words whitespace-normal">
   {clientInfo.name}
 </p>
             <div className="text-sm text-muted-foreground mt-1 space-y-1">
               <p>{clientInfo.email}</p>
               <p>{clientInfo.phone}</p>
-              <p><b>{clientInfo.address}</b></p>
+              
             </div>
           </div>
           <div className="sm:text-right">

@@ -17,12 +17,25 @@ interface InvoiceCardProps {
   onDelete: (id: string) => void;
   onMarkPaid: (id: string) => void;
   onDownload: (invoice: Invoice) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (id: string, selected: boolean) => void;
 }
 
-export function InvoiceCard({ invoice, onDelete, onMarkPaid, onDownload }: InvoiceCardProps) {
+export function InvoiceCard({ invoice, onDelete, onMarkPaid, onDownload, selectable = false, selected = false, onSelect }: InvoiceCardProps) {
   return (
     <div className="card-premium p-4 sm:p-5 animate-fade-up">
       <div className="flex items-start justify-between gap-4">
+        {selectable && (
+          <div className="mr-3 flex items-start pt-1">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={selected}
+              onChange={(e) => onSelect && onSelect(invoice.id, e.target.checked)}
+            />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-2">
             <Link 
